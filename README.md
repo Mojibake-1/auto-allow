@@ -13,6 +13,8 @@
 - 📋 **点击历史** — 每次点击截图记录，方便回查
 - ⚙ **参数可调** — 扫描间隔、匹配置信度、点击冷却
 - 🔔 **系统托盘** — 后台常驻，右键菜单快捷操作
+- 🎨 **主题切换** — 4 种预设主题（Deep Space / Midnight Blue / Cyberpunk / Light）
+- 🛡️ **鼠标活动暂停** — 用户操作鼠标时自动暂停，避免冲突
 
 ## 🚀 安装
 
@@ -38,23 +40,48 @@ pip install pyautogui Pillow opencv-python numpy pystray
 3. 点击 ▶ 开始监控
 4. 程序会自动扫描屏幕并点击匹配按钮
 
-## 📁 文件说明
+### 🎨 切换主题
 
-| 文件 | 说明 |
+点击浮窗 ⚙ 按钮 → **界面主题** 区域选择主题 → 保存 → 重启程序生效
+
+可选主题：
+| 主题 | 风格 |
 |------|------|
-| `auto_allow.py` | 主程序（Tkinter GUI + OpenCV 匹配） |
-| `requirements.txt` | Python 依赖 |
-| `安装.bat` | 一键安装脚本 |
-| `启动.bat` | 启动脚本 |
-| `卸载.bat` | 卸载脚本 |
-| `AutoAllow.vbs` | 静默启动器（无黑窗） |
-| `create_shortcut.ps1` | 桌面快捷方式生成 |
-| `icon.ico` | 应用图标 |
+| 🌑 Deep Space | 默认深空暗色 |
+| 🌊 Midnight Blue | 深蓝色调 |
+| 💜 Cyberpunk | 赛博朋克霓虹 |
+| ☀️ Light | 明亮浅色 |
+
+## 📁 项目结构
+
+```
+auto-allow/
+├── auto_allow.py          # 兼容入口（推荐 python -m auto_allow）
+├── auto_allow/            # 主包
+│   ├── __init__.py        # 包初始化
+│   ├── __main__.py        # python -m 入口
+│   ├── app.py             # 主应用 AutoAllowApp
+│   ├── capture.py         # 屏幕截取覆盖层
+│   ├── constants.py       # 路径常量与默认参数
+│   ├── history.py         # 历史记录查看器
+│   ├── icon.py            # 图标生成
+│   ├── settings.py        # 设置对话框（含主题选择）
+│   ├── templates.py       # 模板管理器
+│   ├── themes.py          # 颜色主题系统
+│   └── widget.py          # 浮窗控件
+├── requirements.txt       # Python 依赖
+├── 安装.bat               # 一键安装脚本
+├── 启动.bat               # 启动脚本
+├── 卸载.bat               # 卸载脚本
+├── AutoAllow.vbs          # 静默启动器（无黑窗）
+├── create_shortcut.ps1    # 桌面快捷方式生成
+└── icon.ico               # 应用图标
+```
 
 ## ⚙ 配置
 
 用户配置保存在 `~/.auto_allow/`：
-- `config.json` — 扫描间隔、置信度等参数
+- `config.json` — 扫描间隔、置信度、主题等参数
 - `templates/` — 保存的按钮模板图片
 - `history/` — 点击历史截图
 

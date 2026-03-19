@@ -1,0 +1,295 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 1200" width="800" height="1200">
+  <defs>
+    <!-- 主背景渐变 -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0a0e27"/>
+      <stop offset="40%" style="stop-color:#0d1533"/>
+      <stop offset="100%" style="stop-color:#1a0a2e"/>
+    </linearGradient>
+    <!-- 闪电渐变 -->
+    <linearGradient id="boltGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffd700"/>
+      <stop offset="50%" style="stop-color:#ffaa00"/>
+      <stop offset="100%" style="stop-color:#ff6b00"/>
+    </linearGradient>
+    <!-- 按钮渐变 -->
+    <linearGradient id="btnGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6c5ce7"/>
+      <stop offset="100%" style="stop-color:#a855f7"/>
+    </linearGradient>
+    <!-- CTA 按钮渐变 -->
+    <linearGradient id="ctaGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#ffd700"/>
+      <stop offset="100%" style="stop-color:#ff8c00"/>
+    </linearGradient>
+    <!-- 光晕渐变 -->
+    <radialGradient id="glowCenter" cx="50%" cy="32%" r="40%">
+      <stop offset="0%" style="stop-color:#ffd700; stop-opacity:0.15"/>
+      <stop offset="60%" style="stop-color:#ff8c00; stop-opacity:0.05"/>
+      <stop offset="100%" style="stop-color:#ff8c00; stop-opacity:0"/>
+    </radialGradient>
+    <radialGradient id="glowPurple" cx="80%" cy="70%" r="35%">
+      <stop offset="0%" style="stop-color:#a855f7; stop-opacity:0.12"/>
+      <stop offset="100%" style="stop-color:#a855f7; stop-opacity:0"/>
+    </radialGradient>
+    <radialGradient id="glowBlue" cx="15%" cy="85%" r="30%">
+      <stop offset="0%" style="stop-color:#3b82f6; stop-opacity:0.1"/>
+      <stop offset="100%" style="stop-color:#3b82f6; stop-opacity:0"/>
+    </radialGradient>
+    <!-- 卡片渐变 -->
+    <linearGradient id="cardGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:rgba(255,255,255,0.08)"/>
+      <stop offset="100%" style="stop-color:rgba(255,255,255,0.02)"/>
+    </linearGradient>
+    <!-- 光线效果 -->
+    <linearGradient id="lineGlow" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#ffd700; stop-opacity:0"/>
+      <stop offset="50%" style="stop-color:#ffd700; stop-opacity:0.6"/>
+      <stop offset="100%" style="stop-color:#ffd700; stop-opacity:0"/>
+    </linearGradient>
+    <!-- 滤镜 -->
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="softGlow">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="strongGlow">
+      <feGaussianBlur stdDeviation="12" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+    <!-- 网格图案 -->
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(255,255,255,0.03)" stroke-width="0.5"/>
+    </pattern>
+    <!-- 虚线圆环 -->
+    <clipPath id="screenClip">
+      <rect x="200" y="350" width="400" height="250" rx="12"/>
+    </clipPath>
+  </defs>
+
+  <!-- ========== 背景 ========== -->
+  <rect width="800" height="1200" fill="url(#bgGrad)"/>
+  <rect width="800" height="1200" fill="url(#grid)"/>
+  <rect width="800" height="1200" fill="url(#glowCenter)"/>
+  <rect width="800" height="1200" fill="url(#glowPurple)"/>
+  <rect width="800" height="1200" fill="url(#glowBlue)"/>
+
+  <!-- 装饰性粒子/星点 -->
+  <circle cx="120" cy="80" r="1.5" fill="#ffd700" opacity="0.6"/>
+  <circle cx="680" cy="150" r="1" fill="#a855f7" opacity="0.5"/>
+  <circle cx="50" cy="400" r="1.2" fill="#3b82f6" opacity="0.4"/>
+  <circle cx="750" cy="500" r="1.8" fill="#ffd700" opacity="0.3"/>
+  <circle cx="100" cy="700" r="1" fill="#a855f7" opacity="0.5"/>
+  <circle cx="700" cy="800" r="1.5" fill="#3b82f6" opacity="0.4"/>
+  <circle cx="200" cy="1100" r="1.2" fill="#ffd700" opacity="0.3"/>
+  <circle cx="600" cy="1050" r="1" fill="#a855f7" opacity="0.6"/>
+  <circle cx="350" cy="60" r="0.8" fill="#fff" opacity="0.3"/>
+  <circle cx="500" cy="180" r="1" fill="#fff" opacity="0.2"/>
+  <circle cx="650" cy="950" r="0.8" fill="#fff" opacity="0.3"/>
+  <circle cx="150" cy="550" r="1.3" fill="#22d3ee" opacity="0.3"/>
+  <circle cx="720" cy="350" r="0.9" fill="#22d3ee" opacity="0.25"/>
+
+  <!-- ========== 顶部装饰线 ========== -->
+  <line x1="0" y1="2" x2="800" y2="2" stroke="url(#lineGlow)" stroke-width="2"/>
+
+  <!-- ========== 主闪电 LOGO ========== -->
+  <g transform="translate(400, 160)" filter="url(#strongGlow)">
+    <!-- 外圈光环 -->
+    <circle cx="0" cy="0" r="78" fill="none" stroke="rgba(255,215,0,0.15)" stroke-width="1.5" stroke-dasharray="8 6"/>
+    <circle cx="0" cy="0" r="65" fill="rgba(255,215,0,0.05)"/>
+    <!-- 闪电图标 -->
+    <path d="M -8 -40 L -28 5 L -5 5 L -12 45 L 30 -8 L 6 -8 L 15 -40 Z" 
+          fill="url(#boltGrad)" filter="url(#glow)"/>
+  </g>
+
+  <!-- ========== 标题区 ========== -->
+  <text x="400" y="280" text-anchor="middle" font-family="'Microsoft YaHei', 'PingFang SC', sans-serif" font-size="52" font-weight="900" fill="#ffffff" letter-spacing="4">
+    Auto Allow
+  </text>
+  <text x="400" y="318" text-anchor="middle" font-family="'Microsoft YaHei', 'PingFang SC', sans-serif" font-size="22" fill="rgba(255,215,0,0.9)" letter-spacing="8" font-weight="300">
+    屏 幕 精 灵
+  </text>
+
+  <!-- 分隔线 -->
+  <line x1="300" y1="345" x2="500" y2="345" stroke="url(#lineGlow)" stroke-width="1"/>
+
+  <!-- 副标题 -->
+  <text x="400" y="378" text-anchor="middle" font-family="'Microsoft YaHei', 'PingFang SC', sans-serif" font-size="15" fill="rgba(255,255,255,0.5)" letter-spacing="2">
+    智能屏幕监控 · 自动精准点击
+  </text>
+
+  <!-- ========== 中心可视化区域 - 模拟屏幕扫描 ========== -->
+  <g transform="translate(0, 10)">
+    <!-- 屏幕外框 -->
+    <rect x="165" y="405" width="470" height="258" rx="16" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+    <!-- 屏幕主体 -->
+    <rect x="170" y="410" width="460" height="248" rx="14" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.06)" stroke-width="0.5"/>
+    
+    <!-- 屏幕顶栏 -->
+    <rect x="170" y="410" width="460" height="32" rx="14" fill="rgba(255,255,255,0.04)"/>
+    <rect x="170" y="430" width="460" height="12" fill="rgba(255,255,255,0.04)"/>
+    <!-- 窗口按钮 -->
+    <circle cx="192" cy="426" r="5" fill="#ff5f57"/>
+    <circle cx="210" cy="426" r="5" fill="#ffbd2e"/>
+    <circle cx="228" cy="426" r="5" fill="#28c840"/>
+    <!-- 标题栏文字 -->
+    <text x="400" y="430" text-anchor="middle" font-family="'Consolas', monospace" font-size="11" fill="rgba(255,255,255,0.4)">application_window.exe</text>
+    
+    <!-- 模拟弹窗 -->
+    <rect x="280" y="475" width="240" height="140" rx="10" fill="rgba(30,35,60,0.95)" stroke="rgba(255,255,255,0.1)" stroke-width="0.5" filter="url(#shadow)"/>
+    <text x="400" y="505" text-anchor="middle" font-family="'Microsoft YaHei', sans-serif" font-size="12" fill="rgba(255,255,255,0.8)">⚠ 是否允许此操作？</text>
+    <text x="400" y="528" text-anchor="middle" font-family="'Microsoft YaHei', sans-serif" font-size="10" fill="rgba(255,255,255,0.4)">应用程序请求管理员权限</text>
+    
+    <!-- "允许"按钮 - 目标 -->
+    <rect x="310" y="555" width="80" height="32" rx="6" fill="url(#btnGrad)" opacity="0.9"/>
+    <text x="350" y="575" text-anchor="middle" font-family="'Microsoft YaHei', sans-serif" font-size="12" fill="#fff" font-weight="bold">✓ 允许</text>
+    <!-- "取消"按钮 -->
+    <rect x="410" y="555" width="80" height="32" rx="6" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.15)" stroke-width="0.5"/>
+    <text x="450" y="575" text-anchor="middle" font-family="'Microsoft YaHei', sans-serif" font-size="12" fill="rgba(255,255,255,0.5)">✗ 取消</text>
+
+    <!-- 扫描框动画效果 -->
+    <rect x="302" y="548" width="96" height="46" rx="4" fill="none" stroke="#ffd700" stroke-width="2" stroke-dasharray="6 4" opacity="0.8" filter="url(#glow)"/>
+    <!-- 角标记 -->
+    <path d="M 302 558 L 302 548 L 312 548" fill="none" stroke="#ffd700" stroke-width="2.5"/>
+    <path d="M 388 548 L 398 548 L 398 558" fill="none" stroke="#ffd700" stroke-width="2.5"/>
+    <path d="M 302 584 L 302 594 L 312 594" fill="none" stroke="#ffd700" stroke-width="2.5"/>
+    <path d="M 388 594 L 398 594 L 398 584" fill="none" stroke="#ffd700" stroke-width="2.5"/>
+    
+    <!-- 匹配标记 -->
+    <text x="400" y="545" text-anchor="middle" font-family="'Consolas', monospace" font-size="9" fill="#ffd700" opacity="0.8">MATCH 98.7%</text>
+
+    <!-- 光标箭头 -->
+    <g transform="translate(340, 580)" filter="url(#glow)">
+      <path d="M 0 0 L 0 16 L 5 12 L 9 20 L 12 18 L 8 10 L 14 10 Z" fill="#fff" opacity="0.9"/>
+    </g>
+    
+    <!-- 扫描线 -->
+    <line x1="170" y1="570" x2="630" y2="570" stroke="rgba(255,215,0,0.08)" stroke-width="1"/>
+  </g>
+
+  <!-- ========== 功能卡片区 ========== -->
+  <!-- 第一行 -->
+  <!-- 卡片1: 屏幕截取 -->
+  <g transform="translate(60, 700)">
+    <rect width="210" height="110" rx="12" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/>
+    <rect width="210" height="1" y="0" rx="0.5" fill="url(#ctaGrad)" opacity="0.5"/>
+    <text x="24" y="38" font-size="26">🎯</text>
+    <text x="60" y="38" font-family="'Microsoft YaHei', sans-serif" font-size="15" fill="#ffffff" font-weight="bold">屏幕截取</text>
+    <text x="24" y="62" font-family="'Microsoft YaHei', sans-serif" font-size="11" fill="rgba(255,255,255,0.45)">框选目标按钮区域</text>
+    <text x="24" y="80" font-family="'Microsoft YaHei', sans-serif" font-size="11" fill="rgba(255,255,255,0.45)">自动保存为匹配模板</text>
+    <text x="24" y="98" font-family="'Consolas', monospace" font-size="9" fill="rgba(255,215,0,0.5)">▸ 拖框即存，即刻生效</text>
+  </g>
+
+  <!-- 卡片2: 多模板 -->
+  <g transform="translate(295, 700)">
+    <rect width="210" height="110" rx="12" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/>
+    <rect width="210" height="1" y="0" rx="0.5" fill="url(#btnGrad)" opacity="0.5"/>
+    <text x="24" y="38" font-size="26">🔄</text>
+    <text x="60" y="38" font-family="'Microsoft YaHei', sans-serif" font-size="15" fill="#ffffff" font-weight="bold">多模板支持</text>
+    <text x="24" y="62" font-family="'Microsoft YaHei', sans-serif" font-size="11" fill="rgba(255,255,255,0.45)">同时监控多个按钮</text>
+    <text x="24" y="80" font-family="'Microsoft YaHei', sans-serif" font-size="11" fill="rgba(255,255,255,0.45)">不同场景灵活切换</text>
+    <text x="24" y="98" font-family="'Consolas', monospace" font-size="9" fill="rgba(168,85,247,0.6)">▸ 多目标并行匹配</text>
+  </g>
+
+  <!-- 卡片3: 自动点击 -->
+  <g transform="translate(530, 700)">
+    <rect width="210" height="110" rx="12" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/>
+    <rect width="210" height="1" y="0" rx="0.5" fill="url(#lineGlow)" opacity="0.5"/>
+    <text x="24" y="38" font-size="26">🖱</text>
+    <text x="60" y="38" font-family="'Microsoft YaHei', sans-serif" font-size="15" fill="#ffffff" font-weight="bold">自动点击</text>
+    <text x="24" y="62" font-family="'Microsoft YaHei', sans-serif" font-size="11" fill="rgba(255,255,255,0.45)">OpenCV 模板匹配引擎</text>
+    <text x="24" y="80" font-family="'Microsoft YaHei', sans-serif" font-size="11" fill="rgba(255,255,255,0.45)">可调置信度精准识别</text>
+    <text x="24" y="98" font-family="'Consolas', monospace" font-size="9" fill="rgba(34,211,238,0.6)">▸ 毫秒级响应速度</text>
+  </g>
+
+  <!-- 第二行 -->
+  <!-- 卡片4: 浮窗控件 -->
+  <g transform="translate(60, 830)">
+    <rect width="210" height="110" rx="12" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/>
+    <text x="24" y="38" font-size="26">📊</text>
+    <text x="60" y="38" font-family="'Microsoft YaHei', sans-serif" font-size="15" fill="#ffffff" font-weight="bold">浮窗控件</text>
+    <text x="24" y="62" font-family="'Microsoft YaHei', sans-serif" font-size="11" fill="rgba(255,255,255,0.45)">悬停展开 · 离开折叠</text>
+    <text x="24" y="80" font-family="'Microsoft YaHei', sans-serif" font-size="11" fill="rgba(255,255,255,0.45)">呼吸灯脉冲动画效果</text>
+    <text x="24" y="98" font-family="'Consolas', monospace" font-size="9" fill="rgba(255,215,0,0.5)">▸ 不遮挡，不干扰</text>
+  </g>
+
+  <!-- 卡片5: 点击历史 -->
+  <g transform="translate(295, 830)">
+    <rect width="210" height="110" rx="12" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/>
+    <text x="24" y="38" font-size="26">📋</text>
+    <text x="60" y="38" font-family="'Microsoft YaHei', sans-serif" font-size="15" fill="#ffffff" font-weight="bold">点击历史</text>
+    <text x="24" y="62" font-family="'Microsoft YaHei', sans-serif" font-size="11" fill="rgba(255,255,255,0.45)">每次点击截图记录</text>
+    <text x="24" y="80" font-family="'Microsoft YaHei', sans-serif" font-size="11" fill="rgba(255,255,255,0.45)">完整操作日志回溯</text>
+    <text x="24" y="98" font-family="'Consolas', monospace" font-size="9" fill="rgba(168,85,247,0.6)">▸ 全程可追溯</text>
+  </g>
+
+  <!-- 卡片6: 系统托盘 -->
+  <g transform="translate(530, 830)">
+    <rect width="210" height="110" rx="12" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/>
+    <text x="24" y="38" font-size="26">🔔</text>
+    <text x="60" y="38" font-family="'Microsoft YaHei', sans-serif" font-size="15" fill="#ffffff" font-weight="bold">系统托盘</text>
+    <text x="24" y="62" font-family="'Microsoft YaHei', sans-serif" font-size="11" fill="rgba(255,255,255,0.45)">后台静默常驻运行</text>
+    <text x="24" y="80" font-family="'Microsoft YaHei', sans-serif" font-size="11" fill="rgba(255,255,255,0.45)">右键菜单快捷操作</text>
+    <text x="24" y="98" font-family="'Consolas', monospace" font-size="9" fill="rgba(34,211,238,0.6)">▸ 零打扰，全天候</text>
+  </g>
+
+  <!-- ========== 技术标签区 ========== -->
+  <g transform="translate(400, 985)">
+    <!-- Python -->
+    <rect x="-240" y="-14" width="78" height="28" rx="14" fill="rgba(55,118,171,0.15)" stroke="rgba(55,118,171,0.3)" stroke-width="0.5"/>
+    <text x="-201" y="5" text-anchor="middle" font-family="'Consolas', monospace" font-size="11" fill="rgba(55,118,171,0.9)">🐍 Python</text>
+    <!-- OpenCV -->
+    <rect x="-148" y="-14" width="82" height="28" rx="14" fill="rgba(34,211,238,0.1)" stroke="rgba(34,211,238,0.25)" stroke-width="0.5"/>
+    <text x="-107" y="5" text-anchor="middle" font-family="'Consolas', monospace" font-size="11" fill="rgba(34,211,238,0.8)">👁 OpenCV</text>
+    <!-- Tkinter -->
+    <rect x="-52" y="-14" width="78" height="28" rx="14" fill="rgba(168,85,247,0.1)" stroke="rgba(168,85,247,0.25)" stroke-width="0.5"/>
+    <text x="-13" y="5" text-anchor="middle" font-family="'Consolas', monospace" font-size="11" fill="rgba(168,85,247,0.8)">🖼 Tkinter</text>
+    <!-- Windows -->
+    <rect x="40" y="-14" width="92" height="28" rx="14" fill="rgba(59,130,246,0.1)" stroke="rgba(59,130,246,0.25)" stroke-width="0.5"/>
+    <text x="86" y="5" text-anchor="middle" font-family="'Consolas', monospace" font-size="11" fill="rgba(59,130,246,0.8)">🪟 Windows</text>
+    <!-- 开源 -->
+    <rect x="146" y="-14" width="90" height="28" rx="14" fill="rgba(255,215,0,0.1)" stroke="rgba(255,215,0,0.25)" stroke-width="0.5"/>
+    <text x="191" y="5" text-anchor="middle" font-family="'Consolas', monospace" font-size="11" fill="rgba(255,215,0,0.7)">⭐ 开源免费</text>
+  </g>
+
+  <!-- ========== Slogan ========== -->
+  <text x="400" y="1048" text-anchor="middle" font-family="'Microsoft YaHei', 'PingFang SC', sans-serif" font-size="20" fill="rgba(255,255,255,0.7)" font-weight="300" letter-spacing="3">
+    解放双手，让重复点击成为历史
+  </text>
+
+  <!-- ========== CTA 按钮 ========== -->
+  <g transform="translate(400, 1095)">
+    <rect x="-120" y="-22" width="240" height="44" rx="22" fill="url(#ctaGrad)" filter="url(#glow)"/>
+    <text x="0" y="6" text-anchor="middle" font-family="'Microsoft YaHei', sans-serif" font-size="16" fill="#0a0e27" font-weight="bold" letter-spacing="2">⚡ 立即下载使用</text>
+  </g>
+
+  <!-- GitHub 地址 -->
+  <text x="400" y="1155" text-anchor="middle" font-family="'Consolas', monospace" font-size="11" fill="rgba(255,255,255,0.3)">
+    github.com/Mojibake-1/auto-allow
+  </text>
+
+  <!-- ========== 底部装饰线 ========== -->
+  <line x1="0" y1="1198" x2="800" y2="1198" stroke="url(#lineGlow)" stroke-width="2"/>
+
+  <!-- 装饰性光线 -->
+  <line x1="0" y1="0" x2="200" y2="200" stroke="rgba(255,215,0,0.03)" stroke-width="1"/>
+  <line x1="800" y1="0" x2="600" y2="300" stroke="rgba(168,85,247,0.03)" stroke-width="1"/>
+  <line x1="0" y1="1200" x2="300" y2="900" stroke="rgba(59,130,246,0.03)" stroke-width="1"/>
+  <line x1="800" y1="1200" x2="500" y2="900" stroke="rgba(255,215,0,0.03)" stroke-width="1"/>
+</svg>
