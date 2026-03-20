@@ -41,8 +41,7 @@ THEMES = {
         'warning': '#e6a800', 'border': '#d8d8e0',
     },
 }
-
-DEFAULT_THEME = 'deep_space'
+DEFAULT_THEME = 'midnight_blue'
 
 
 def get_theme(theme_id: str) -> dict:

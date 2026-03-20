@@ -90,82 +90,122 @@ class FloatingWidget(tk.Toplevel):
         except Exception:
             pass
 
-    # ── 生成渐变圆形图标 ──────────────────────────────
-    def _render_orb(self, size, glow_alpha=180):
-        """用 PIL 渲染发光渐变圆球图标"""
-        # 背景使用色键颜色，配合 transparentcolor 实现透明
-        chroma = (1, 1, 1)
-        img = Image.new('RGB', (size, size), chroma)
-        draw = ImageDraw.Draw(img)
+    # ── 工具 ────────────────────────────────────────────
+    @staticmethod
+    def _hex_to_rgb(hex_color):
+        """将 '#rrggbb' 转为 (r, g, b) 元组"""
+        h = hex_color.lstrip('#')
+        if len(h) < 6: return (255, 255, 255)
+        return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
 
-        cx, cy = size // 2, size // 2
-        r = size // 2 - 2
+    def _generate_aa_frames(self):
+        """用 PIL 在 4X 分辨率下预渲染 36 帧高帧率抗锯齿雷达动画"""
+        self._anim_frames = []
+        sz = self.COLLAPSED_W
+        sc = 4
+        big_size = sz * sc
+        
+        ar, ag, ab = self._hex_to_rgb(self.c.get('accent', '#4a9eff'))
+        bg_r, bg_g, bg_b = self._hex_to_rgb(self.c.get('bg', '#0f0f1a'))
+        dim_r, dim_g, dim_b = self._hex_to_rgb(self.c.get('dim', '#8888aa'))
 
-        # 外圈光晕
-        for i in range(r, r - 6, -1):
-            t_glow = (i - (r - 6)) / 6
-            draw.ellipse([cx - i, cy - i, cx + i, cy + i],
-                         fill=(int(108 * t_glow + chroma[0] * (1 - t_glow)),
-                               int(99 * t_glow + chroma[1] * (1 - t_glow)),
-                               int(255 * t_glow + chroma[2] * (1 - t_glow))))
+        # 计算透明色键：与 bg 色差 1 单位，肉眼不可分辨但 OS 可区分
+        tr = min(255, bg_r + 1) if bg_r < 128 else max(0, bg_r - 1)
+        self._trans_color_rgb = (tr, bg_g, bg_b)
+        self._trans_color_hex = f'#{tr:02x}{bg_g:02x}{bg_b:02x}'
 
-        # 渐变填充圆
-        for i in range(r - 4, 0, -1):
-            t = i / (r - 4)
-            red = int(90 + 40 * (1 - t))
-            grn = int(70 + 50 * (1 - t))
-            blu = int(240 - 20 * (1 - t))
-            draw.ellipse([cx - i, cy - i, cx + i, cy + i],
-                         fill=(red, grn, blu, 255))
+        # 4x 超采样圆形 mask（缩放后边缘自动抗锯齿）
+        big_mask = Image.new('L', (big_size, big_size), 0)
+        ImageDraw.Draw(big_mask).ellipse([0, 0, big_size - 1, big_size - 1], fill=255)
+        self._small_mask = big_mask.resize((sz, sz), Image.LANCZOS)
 
-        # 高光
-        hr = r // 3
+        cx, cy = big_size // 2, big_size // 2
+        r_orb = big_size // 2 - 6 * sc
+        r_arc = big_size // 2 - 3 * sc
+        arc_width = int(2 * sc)
+
+        base_layer = Image.new('RGB', (big_size, big_size), (bg_r, bg_g, bg_b))
+        draw_b = ImageDraw.Draw(base_layer)
+
+        for i in range(r_orb, 0, -1):
+            t = i / r_orb
+            red = max(0, min(255, int(ar * 0.7 + 60 * (1 - t))))
+            grn = max(0, min(255, int(ag * 0.7 + 60 * (1 - t))))
+            blu = max(0, min(255, int(ab * 0.85 + 20 * (1 - t))))
+            draw_b.ellipse([cx - i, cy - i, cx + i, cy + i], fill=(red, grn, blu))
+
+        hr = r_orb // 3
         for i in range(hr, 0, -1):
             blend = 0.3 * (1 - i / hr)
-            # 在圆心左上方画白色高光
-            base_r, base_g, base_b = 130, 120, 220
-            pr = int(base_r + (255 - base_r) * blend)
-            pg = int(base_g + (255 - base_g) * blend)
-            pb = int(base_b + (255 - base_b) * blend)
-            draw.ellipse([cx - hr + 2 - i, cy - hr - 2 - i,
-                          cx - hr + 2 + i, cy - hr - 2 + i],
-                         fill=(pr, pg, pb))
+            base_cr = min(255, int(ar * 0.85 + 40))
+            base_cg = min(255, int(ag * 0.85 + 30))
+            base_cb = min(255, int(ab * 0.85 + 25))
+            pr = int(min(255, base_cr + (255 - base_cr) * blend))
+            pg = int(min(255, base_cg + (255 - base_cg) * blend))
+            pb = int(min(255, base_cb + (255 - base_cb) * blend))
+            draw_b.ellipse([cx - hr + 1.5*sc - i, cy - hr - 1.5*sc - i,
+                            cx - hr + 1.5*sc + i, cy - hr - 1.5*sc + i], fill=(pr, pg, pb))
 
-        # ⚡ 闪电
-        s = size / 72  # scale factor
+        s = big_size / 72
+        # 精准居中计算
+        # span X: 4s to 28s = 24s. Center of shape = 16s
+        # span Y: 0s to 46s = 46s. Center of shape = 23s
+        ox = cx - 16*s
+        oy = cy - 23*s
         bolt = [
-            (int(36 * s), int(12 * s)), (int(24 * s), int(35 * s)),
-            (int(33 * s), int(35 * s)), (int(28 * s), int(58 * s)),
-            (int(48 * s), int(30 * s)), (int(38 * s), int(30 * s)),
-            (int(44 * s), int(12 * s)),
+            (ox + 16*s, oy + 0*s), (ox + 4*s, oy + 23*s),
+            (ox + 13*s, oy + 23*s), (ox + 8*s, oy + 46*s),
+            (ox + 28*s, oy + 18*s), (ox + 18*s, oy + 18*s),
+            (ox + 24*s, oy + 0*s),
         ]
-        draw.polygon(bolt, fill=(255, 255, 255))
+        draw_b.polygon(bolt, fill=(255, 255, 255))
 
-        return img
+        track_r = int(dim_r * 0.4 + bg_r * 0.6)
+        track_g = int(dim_g * 0.4 + bg_g * 0.6)
+        track_b = int(dim_b * 0.4 + bg_b * 0.6)
 
-    # ── 折叠视图 ──────────────────────────────────────
+        idle_frame = base_layer.copy()
+        draw_i = ImageDraw.Draw(idle_frame)
+        for w in range(arc_width):
+            draw_i.arc([cx - r_arc + w, cy - r_arc + w, cx + r_arc - w, cy + r_arc - w],
+                       start=0, end=360, fill=(track_r, track_g, track_b))
+        _small = idle_frame.resize((sz, sz), Image.LANCZOS)
+        _masked = Image.new('RGB', (sz, sz), self._trans_color_rgb)
+        _masked.paste(_small, mask=self._small_mask)
+        self._idle_frame = ImageTk.PhotoImage(_masked)
+
+        for frame_idx in range(36):
+            frame = base_layer.copy()
+            draw_f = ImageDraw.Draw(frame)
+            start_angle = frame_idx * 10
+            
+            for w in range(arc_width):
+                draw_f.arc([cx - r_arc + w, cy - r_arc + w, cx + r_arc - w, cy + r_arc - w],
+                           start=0, end=360, fill=(track_r, track_g, track_b))
+            
+            for w in range(arc_width):
+                draw_f.arc([cx - r_arc + w, cy - r_arc + w, cx + r_arc - w, cy + r_arc - w],
+                           start=start_angle, end=start_angle + 120, fill=(ar, ag, ab))
+            
+            _small = frame.resize((sz, sz), Image.LANCZOS)
+            _masked = Image.new('RGB', (sz, sz), self._trans_color_rgb)
+            _masked.paste(_small, mask=self._small_mask)
+            self._anim_frames.append(ImageTk.PhotoImage(_masked))
+
     def _build_collapsed_view(self):
         c = self.c
         f = self.collapsed_frame
         sz = self.COLLAPSED_W
 
-        # Canvas 作为容器，背景用色键颜色
         self.mini_canvas = tk.Canvas(f, width=sz, height=sz,
-                                      bg='#010101', highlightthickness=0,
+                                      bg=c['bg'], highlightthickness=0,
                                       cursor="hand2")
         self.mini_canvas.pack(fill=tk.BOTH, expand=True)
 
-        # 渲染基础圆球图标
-        self._orb_base = self._render_orb(sz, glow_alpha=180)
-        self._orb_tk = ImageTk.PhotoImage(self._orb_base)
-        self._orb_canvas_id = self.mini_canvas.create_image(
-            sz // 2, sz // 2, image=self._orb_tk)
-
-        # 状态环（用圆弧表示）
-        pad = 3
-        self._ring_id = self.mini_canvas.create_oval(
-            pad, pad, sz - pad, sz - pad,
-            outline=c['dim'], width=2, dash=(4, 4))
+        # 4X 超采样预渲染抗锯齿帧
+        self._generate_aa_frames()
+        self._frame_idx = 0
+        self._img_item = self.mini_canvas.create_image(sz // 2, sz // 2, image=self._idle_frame)
 
         # 拖动
         self.mini_canvas.bind("<Button-1>", self._start_drag)
@@ -310,11 +350,14 @@ class FloatingWidget(tk.Toplevel):
         x = min(x, scr_w - self.EXPANDED_W - 5)
         y = min(y, scr_h - self.EXPANDED_H - 5)
         self.geometry(f"{self.EXPANDED_W}x{self.EXPANDED_H}+{x}+{y}")
-        # 取消透明色键
+        # 取消透明色键，恢复正常 bg
         try:
             self.attributes('-transparentcolor', '')
         except Exception:
             pass
+        self.configure(bg=self.c['bg'])
+        self.collapsed_frame.configure(bg=self.c['bg'])
+        self.mini_canvas.configure(bg=self.c['bg'])
         self.attributes('-alpha', 0.95)
         self.after(20, lambda: self._apply_rounded_corners(8))
 
@@ -324,21 +367,23 @@ class FloatingWidget(tk.Toplevel):
         self.expanded_frame.pack_forget()
         self.collapsed_frame.pack(fill=tk.BOTH, expand=True)
 
-        # 更新状态环颜色
-        self.mini_canvas.itemconfig(self._ring_id, outline=self._status_color)
-
         x, y = self.winfo_x(), self.winfo_y()
         self.geometry(f"{self.COLLAPSED_W}x{self.COLLAPSED_H}+{x}+{y}")
-        # 启用透明色键，让四角完全透明
+        
+        # 透明色键方案：圆形外部像素 = trans_color → OS 渲染为透明
+        trans = self._trans_color_hex
+        self.configure(bg=trans)
+        self.collapsed_frame.configure(bg=trans)
+        self.mini_canvas.configure(bg=trans)
         try:
-            self.attributes('-transparentcolor', '#010101')
+            self.attributes('-transparentcolor', trans)
         except Exception:
             pass
-        self.after(20, self._apply_circular_region)
 
-        # 启动脉冲动画（监控中时）
         if self.app.monitoring:
             self._start_pulse()
+        else:
+            self.mini_canvas.itemconfig(self._img_item, image=self._idle_frame)
 
     # ── 脉冲动画 ──────────────────────────────────────
     def _start_pulse(self):
@@ -353,28 +398,29 @@ class FloatingWidget(tk.Toplevel):
             self._pulse_job = None
         # 恢复默认外观
         if not self.is_expanded:
-            self.mini_canvas.itemconfig(self._ring_id, width=2)
+            self.mini_canvas.itemconfig(self._img_item, image=self._idle_frame)
             self.attributes('-alpha', 0.95)
 
     def _do_pulse(self):
-        """呼吸灯脉冲效果"""
+        """丝滑自转弧线脉冲效果"""
         if self.is_expanded or not self.app.monitoring:
             self._pulse_job = None
             return
 
-        self._pulse_phase += 0.08
-        # 呼吸效果：alpha 在 0.7~1.0 之间变化
-        val = (math.sin(self._pulse_phase) + 1) / 2  # 0~1
-        alpha = 0.70 + 0.30 * val
-        ring_width = 2 + int(3 * val)
+        self._frame_idx = (self._frame_idx + 1) % 36
+        
+        # 呼吸效果：轻微 alpha 渐变增强质感
+        val = (math.sin(self._frame_idx / 36.0 * math.pi * 2) + 1) / 2
+        alpha = 0.85 + 0.15 * val
 
         try:
             self.attributes('-alpha', alpha)
-            self.mini_canvas.itemconfig(self._ring_id, width=ring_width)
+            # 通过播放预渲染帧实现硬件级平滑动画
+            self.mini_canvas.itemconfig(self._img_item, image=self._anim_frames[self._frame_idx])
         except Exception:
             pass
 
-        self._pulse_job = self.after(50, self._do_pulse)
+        self._pulse_job = self.after(30, self._do_pulse)  # 提高帧率让动作丝滑
 
     # ── 拖动 ──────────────────────────────────────────
     def _start_drag(self, e):
@@ -404,8 +450,6 @@ class FloatingWidget(tk.Toplevel):
         if self.is_expanded:
             self.status_lbl.configure(text=text, fg=color)
             self.dot.itemconfig(self._dot_id, fill=color)
-        else:
-            self.mini_canvas.itemconfig(self._ring_id, outline=color)
 
     def set_monitoring_ui(self, active):
         if self.is_expanded:

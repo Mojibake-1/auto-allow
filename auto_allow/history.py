@@ -5,7 +5,7 @@
 import os
 import tkinter as tk
 from PIL import Image, ImageTk
-from .constants import MAX_HISTORY
+from .constants import MAX_HISTORY, HISTORY_DIR
 
 
 class HistoryViewer(tk.Toplevel):
@@ -98,7 +98,8 @@ class HistoryViewer(tk.Toplevel):
         # 缩略图
         try:
             if os.path.exists(filepath):
-                pil = Image.open(filepath).convert("RGB")
+                with Image.open(filepath) as img:
+                    pil = img.convert("RGB")
                 # 缩放到预览大小
                 ratio = min(500 / max(pil.width, 1),
                            160 / max(pil.height, 1), 1.0)
@@ -111,10 +112,10 @@ class HistoryViewer(tk.Toplevel):
                                       cursor="hand2")
                 img_label.pack(padx=8, pady=(2, 6))
 
-                # 点击打开原图
-                fp = filepath  # 闭包捕获
+                # 点击打开原图（带路径校验）
+                fp = filepath
                 img_label.bind("<Button-1>",
-                               lambda e, p=fp: os.startfile(p))
+                               lambda e, p=fp: self._safe_open(p))
             else:
                 tk.Label(card, text="(截图文件已删除)",
                          font=("Microsoft YaHei", 9), fg=c['dim'],
@@ -123,3 +124,15 @@ class HistoryViewer(tk.Toplevel):
             tk.Label(card, text=f"(加载失败: {str(ex)[:30]})",
                      font=("Microsoft YaHei", 9), fg=c['danger'],
                      bg=c['card']).pack(padx=8, pady=6)
+
+    def _safe_open(self, filepath):
+        """路径校验后调用 os.startfile"""
+        try:
+            real = os.path.realpath(filepath)
+            allowed = os.path.realpath(HISTORY_DIR)
+            # 使用 commonpath 做目录边界校验（防止同前缀兄弟目录绕过）
+            if (os.path.commonpath([real, allowed]) == allowed
+                    and real.lower().endswith('.png')):
+                os.startfile(real)
+        except Exception:
+            pass

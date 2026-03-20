@@ -15,6 +15,9 @@ import time
 import os
 import json
 import glob
+import logging
+
+logger = logging.getLogger(__name__)
 
 from .constants import (
     CONFIG_DIR, HISTORY_DIR, CONFIG_PATH,
@@ -49,11 +52,17 @@ class AutoAllowApp:
         self._last_mouse_pos = None       # 鼠标活动检测
         self._last_mouse_move_time = 0
         self._is_software_clicking = False
+        self._lock = threading.Lock()  # 保护跨线程共享状态
 
         # 配置变量
         self.interval = tk.DoubleVar(value=DEFAULT_INTERVAL)
         self.confidence = tk.DoubleVar(value=DEFAULT_CONFIDENCE)
         self.cooldown = tk.DoubleVar(value=DEFAULT_COOLDOWN)
+
+        # 线程安全的配置快照（监控线程读取这些而非 DoubleVar）
+        self._cached_interval = DEFAULT_INTERVAL
+        self._cached_confidence = DEFAULT_CONFIDENCE
+        self._cached_cooldown = DEFAULT_COOLDOWN
 
         # 初始化
         os.makedirs(CONFIG_DIR, exist_ok=True)
@@ -82,6 +91,52 @@ class AutoAllowApp:
         except Exception:
             pass
         return DEFAULT_THEME
+
+    def apply_theme(self, theme_id):
+        """实时切换主题，无需重启"""
+        self.current_theme_id = theme_id
+        self.c = get_theme(theme_id)
+        self.save_config()
+
+        # 保存旧浮窗状态
+        try:
+            was_visible = self.widget.winfo_viewable()
+            old_x = self.widget.winfo_x()
+            old_y = self.widget.winfo_y()
+        except Exception:
+            was_visible = True
+            old_x = self.root.winfo_screenwidth() - FloatingWidget.EXPANDED_W - 20
+            old_y = self.root.winfo_screenheight() - FloatingWidget.EXPANDED_H - 80
+
+        # 停止动画再销毁，避免 after 回调异常
+        try:
+            self.widget._stop_pulse()
+            if self.widget._collapse_timer:
+                self.widget.after_cancel(self.widget._collapse_timer)
+                self.widget._collapse_timer = None
+            self.widget.destroy()
+        except Exception:
+            pass
+
+        # 用新主题创建浮窗
+        self.widget = FloatingWidget(self)
+        self.widget.update_template_count(self.tpl_mgr.count())
+        self.widget.update_count(self.click_count)
+
+        # 恢复位置
+        self.widget._pos_x = old_x
+        self.widget._pos_y = old_y
+        self.widget.geometry(
+            f"{FloatingWidget.EXPANDED_W}x{FloatingWidget.EXPANDED_H}"
+            f"+{old_x}+{old_y}")
+
+        # 恢复监控状态显示
+        if self.monitoring:
+            self.widget.set_monitoring_ui(True)
+            self.widget.set_status("监控中...", self.c['success'])
+
+        if not was_visible:
+            self.widget.hide()
 
     # ── 系统托盘 ──────────────────────────────────────
     def _create_tray(self):
@@ -143,7 +198,12 @@ class AutoAllowApp:
             messagebox.showwarning("提示", "请先截取至少一个目标按钮模板！")
             return
         self.monitoring = True
-        self.last_click_time = {}
+        with self._lock:
+            self.last_click_time = {}
+        # 缓存配置供监控线程安全读取
+        self._cached_interval = self.interval.get()
+        self._cached_confidence = self.confidence.get()
+        self._cached_cooldown = self.cooldown.get()
         self.widget.set_monitoring_ui(True)
         self.widget.set_status("监控中...", self.c['success'])
         self.widget.set_last_action(
@@ -178,8 +238,11 @@ class AutoAllowApp:
         name = self.tpl_mgr.add(region)
         self.widget.show()
         self.widget.update_template_count(self.tpl_mgr.count())
-        self.widget.set_last_action(
-            f"✅ 已添加「{name}」({region.width}×{region.height})")
+        if name is None:
+            self.widget.set_last_action("⚠ 模板数量已达上限，请先删除旧模板")
+        else:
+            self.widget.set_last_action(
+                f"✅ 已添加「{name}」({region.width}×{region.height})")
         self.save_config()
         if self._capture_callback:
             self._capture_callback()
@@ -338,14 +401,15 @@ class AutoAllowApp:
                 screen_cv = cv2.cvtColor(screen_np, cv2.COLOR_RGB2BGR)
                 screen_gray = cv2.cvtColor(screen_cv, cv2.COLOR_BGR2GRAY)
                 del screen_np  # 释放中间数组
-                threshold = self.confidence.get()
-                cd = self.cooldown.get()
+                threshold = self._cached_confidence
+                cd = self._cached_cooldown
                 now = time.time()
 
                 for name, tpl_bgr, tpl_gray in self.tpl_mgr.cv_gray_list():
-                    if name in self.last_click_time:
-                        if now - self.last_click_time[name] < cd:
-                            continue
+                    with self._lock:
+                        last_t = self.last_click_time.get(name, 0)
+                    if now - last_t < cd:
+                        continue
 
                     th, tw = tpl_gray.shape[:2]
                     sh, sw = screen_gray.shape[:2]
@@ -377,6 +441,26 @@ class AutoAllowApp:
                         cx = x + tw // 2
                         cy = y + th // 2
 
+                        # Step 3: ROI 快速二次验证（缩小 TOCTOU 窗口）
+                        try:
+                            scr_w, scr_h = screenshot.size
+                            roi_grab = ImageGrab.grab(
+                                bbox=(max(x - 2, 0), max(y - 2, 0),
+                                      min(x + tw + 2, scr_w),
+                                      min(y + th + 2, scr_h)))
+                            roi_arr = cv2.cvtColor(
+                                np.array(roi_grab), cv2.COLOR_RGB2BGR)
+                            if (roi_arr.shape[0] >= th
+                                    and roi_arr.shape[1] >= tw):
+                                recheck = cv2.matchTemplate(
+                                    roi_arr, tpl_bgr,
+                                    cv2.TM_CCOEFF_NORMED)
+                                _, rv, _, _ = cv2.minMaxLoc(recheck)
+                                if rv < threshold:
+                                    continue  # 目标已变化，跳过
+                        except Exception:
+                            pass  # 二次验证失败不阻塞主流程
+
                         # 保存点击上下文截图（点击前截取）
                         snap_path = self._save_click_snapshot(
                             screenshot, max_loc, tw, th, name)
@@ -389,8 +473,9 @@ class AutoAllowApp:
                         self._is_software_clicking = False
                         self._last_mouse_pos = pyautogui.position()
 
-                        self.last_click_time[name] = time.time()
-                        self.click_count += 1
+                        with self._lock:
+                            self.last_click_time[name] = time.time()
+                            self.click_count += 1
 
                         ts = time.strftime("%H:%M:%S")
                         self.root.after(0, self._on_clicked,
@@ -402,12 +487,13 @@ class AutoAllowApp:
                 # 释放大数组节省内存
                 del screen_cv, screen_gray, screenshot
 
-                time.sleep(self.interval.get())
+                time.sleep(self._cached_interval)
 
             except pyautogui.FailSafeException:
                 self.root.after(0, self._emergency_stop)
                 return
             except Exception as e:
+                logger.error("监控循环异常: %s", e, exc_info=True)
                 self.root.after(0, self.widget.set_last_action,
                                 f"⚠ 错误: {str(e)[:40]}")
                 time.sleep(3)
@@ -431,12 +517,14 @@ class AutoAllowApp:
             crop.save(filepath)
 
             ts_display = time.strftime("%H:%M:%S")
-            self.click_history.append((ts_display, filepath, name,
-                                       self.click_count))
-
-            # 只保留最近 MAX_HISTORY 条
-            if len(self.click_history) > MAX_HISTORY:
-                old = self.click_history.pop(0)
+            with self._lock:
+                self.click_history.append((ts_display, filepath, name,
+                                           self.click_count))
+                if len(self.click_history) > MAX_HISTORY:
+                    old = self.click_history.pop(0)
+                else:
+                    old = None
+            if old:
                 try:
                     if os.path.exists(old[1]):
                         os.remove(old[1])
@@ -444,7 +532,8 @@ class AutoAllowApp:
                     pass
 
             return filepath
-        except Exception:
+        except Exception as e:
+            logger.warning("保存点击截图失败: %s", e)
             return None
 
     def _on_clicked(self, name, x, y, conf, ts, snap_path=None):
@@ -470,6 +559,10 @@ class AutoAllowApp:
                 'cooldown': self.cooldown.get(),
                 'theme': self.current_theme_id,
             }
+            # 同步更新线程安全的配置快照
+            self._cached_interval = cfg['interval']
+            self._cached_confidence = cfg['confidence']
+            self._cached_cooldown = cfg['cooldown']
             with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
                 json.dump(cfg, f, indent=2)
         except Exception:
@@ -480,12 +573,19 @@ class AutoAllowApp:
             if os.path.exists(CONFIG_PATH):
                 with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
                     cfg = json.load(f)
-                self.interval.set(cfg.get('interval', DEFAULT_INTERVAL))
-                self.confidence.set(cfg.get('confidence', DEFAULT_CONFIDENCE))
-                self.cooldown.set(cfg.get('cooldown', DEFAULT_COOLDOWN))
+                iv = max(0.2, min(float(cfg.get('interval', DEFAULT_INTERVAL)), 30.0))
+                cf = max(0.5, min(float(cfg.get('confidence', DEFAULT_CONFIDENCE)), 1.0))
+                cd = max(0.0, min(float(cfg.get('cooldown', DEFAULT_COOLDOWN)), 60.0))
+                self.interval.set(iv)
+                self.confidence.set(cf)
+                self.cooldown.set(cd)
+                self._cached_interval = iv
+                self._cached_confidence = cf
+                self._cached_cooldown = cd
                 self.current_theme_id = cfg.get('theme', DEFAULT_THEME)
-        except Exception:
-            pass
+                self.c = get_theme(self.current_theme_id)
+        except Exception as e:
+            logger.warning("配置加载失败，使用默认值: %s", e)
 
     def _load_history(self):
         """启动时从磁盘加载已有的历史截图"""

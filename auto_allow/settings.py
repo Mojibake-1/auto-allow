@@ -14,8 +14,8 @@ class SettingsDialog(tk.Toplevel):
         self.app = app
         self.c = app.c
         self.title("⚙ Auto Allow 设置")
-        self.geometry("460x640")
-        self.resizable(False, False)
+        self.geometry("480x760")
+        self.resizable(False, True)  # 允许纵向调整大小以防内容溢出
         self.attributes('-topmost', True)
         self.configure(bg=self.c['bg'])
 
@@ -113,7 +113,7 @@ class SettingsDialog(tk.Toplevel):
             )
             rb.pack(side=tk.LEFT, padx=4, pady=2)
 
-        tk.Label(inner_theme, text="💡 切换主题后需重启生效",
+        tk.Label(inner_theme, text="💡 切换主题即时生效",
                  font=("Microsoft YaHei", 8),
                  fg=c['dim'], bg=c['card']).pack(anchor='w', padx=4, pady=(4, 0))
 
@@ -197,14 +197,12 @@ class SettingsDialog(tk.Toplevel):
             self.app.widget.update_template_count(0)
 
     def _save(self):
-        # 保存主题选择
+        # 应用主题（实时切换，无需重启）
         new_theme = self.theme_var.get()
         if new_theme != self.app.current_theme_id:
-            self.app.current_theme_id = new_theme
-            messagebox.showinfo("主题已更改",
-                                f"已切换到「{new_theme}」主题\n请重启程序以应用新主题",
-                                parent=self)
-        self.app.save_config()
+            self.app.apply_theme(new_theme)
+        else:
+            self.app.save_config()
         self._close()
 
     def _close(self):
