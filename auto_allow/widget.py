@@ -75,7 +75,11 @@ class FloatingWidget(tk.Toplevel):
             h = self.winfo_height()
             rgn = ctypes.windll.gdi32.CreateRoundRectRgn(
                 0, 0, w + 1, h + 1, radius, radius)
-            ctypes.windll.user32.SetWindowRgn(hwnd, rgn, True)
+            if rgn:
+                # SetWindowRgn takes ownership of rgn on success;
+                # on failure we must delete it ourselves
+                if not ctypes.windll.user32.SetWindowRgn(hwnd, rgn, True):
+                    ctypes.windll.gdi32.DeleteObject(rgn)
         except Exception:
             pass
 
@@ -86,7 +90,9 @@ class FloatingWidget(tk.Toplevel):
             w = self.winfo_width()
             h = self.winfo_height()
             rgn = ctypes.windll.gdi32.CreateEllipticRgn(0, 0, w + 1, h + 1)
-            ctypes.windll.user32.SetWindowRgn(hwnd, rgn, True)
+            if rgn:
+                if not ctypes.windll.user32.SetWindowRgn(hwnd, rgn, True):
+                    ctypes.windll.gdi32.DeleteObject(rgn)
         except Exception:
             pass
 
@@ -369,7 +375,7 @@ class FloatingWidget(tk.Toplevel):
 
         x, y = self.winfo_x(), self.winfo_y()
         self.geometry(f"{self.COLLAPSED_W}x{self.COLLAPSED_H}+{x}+{y}")
-        
+
         # 透明色键方案：圆形外部像素 = trans_color → OS 渲染为透明
         trans = self._trans_color_hex
         self.configure(bg=trans)
@@ -379,6 +385,9 @@ class FloatingWidget(tk.Toplevel):
             self.attributes('-transparentcolor', trans)
         except Exception:
             pass
+
+        # 圆形窗口区域裁剪兜底（transparentcolor 不生效时仍保证圆形）
+        self.after(20, self._apply_circular_region)
 
         if self.app.monitoring:
             self._start_pulse()

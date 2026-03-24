@@ -10,7 +10,8 @@ from .constants import ICON_PATH
 def generate_icon():
     """生成应用程序图标 (.ico)"""
     if os.path.exists(ICON_PATH):
-        return Image.open(ICON_PATH)
+        with Image.open(ICON_PATH) as img:
+            return img.copy()
 
     size = 256
     img = Image.new('RGBA', (size, size), (0, 0, 0, 0))

@@ -22,7 +22,9 @@ class HistoryViewer(tk.Toplevel):
         self.configure(bg=self.c['bg'])
 
         self._thumbs = []
+        self._wheel_bindings = []
         self._build()
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _build(self):
         c = self.c
@@ -58,9 +60,14 @@ class HistoryViewer(tk.Toplevel):
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        # 鼠标滚轮绑定
-        canvas.bind_all("<MouseWheel>",
-                        lambda e: canvas.yview_scroll(-e.delta // 120, "units"))
+        # 鼠标滚轮绑定（仅在本窗口内生效）
+        def _on_mousewheel(e):
+            try:
+                canvas.yview_scroll(-e.delta // 120, "units")
+            except tk.TclError:
+                pass
+        bind_id = canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        self._wheel_bindings.append((canvas, "<MouseWheel>", bind_id))
 
         # 填充历史记录（最新的在上面）
         if not self.app.click_history:
@@ -124,6 +131,16 @@ class HistoryViewer(tk.Toplevel):
             tk.Label(card, text=f"(加载失败: {str(ex)[:30]})",
                      font=("Microsoft YaHei", 9), fg=c['danger'],
                      bg=c['card']).pack(padx=8, pady=6)
+
+    def _on_close(self):
+        """清理全局绑定后关闭"""
+        for widget, event, bind_id in self._wheel_bindings:
+            try:
+                widget.unbind_all(event)
+            except Exception:
+                pass
+        self._wheel_bindings.clear()
+        self.destroy()
 
     def _safe_open(self, filepath):
         """路径校验后调用 os.startfile"""

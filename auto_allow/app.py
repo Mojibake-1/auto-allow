@@ -43,9 +43,9 @@ class AutoAllowApp:
         self.c = get_theme(self.current_theme_id)
 
         # 状态
-        self.monitoring = False
+        self._monitoring = False
         self.click_count = 0
-        self.running = True
+        self._running = True
         self.last_click_time = {}
         self.settings_win = None
         self._capture_callback = None
@@ -53,6 +53,26 @@ class AutoAllowApp:
         self._last_mouse_move_time = 0
         self._is_software_clicking = False
         self._lock = threading.Lock()  # 保护跨线程共享状态
+
+    @property
+    def monitoring(self):
+        with self._lock:
+            return self._monitoring
+
+    @monitoring.setter
+    def monitoring(self, value):
+        with self._lock:
+            self._monitoring = value
+
+    @property
+    def running(self):
+        with self._lock:
+            return self._running
+
+    @running.setter
+    def running(self, value):
+        with self._lock:
+            self._running = value
 
         # 配置变量
         self.interval = tk.DoubleVar(value=DEFAULT_INTERVAL)
@@ -468,10 +488,12 @@ class AutoAllowApp:
                         # 记住鼠标位置 → 点击 → 恢复原位
                         orig_x, orig_y = pyautogui.position()
                         self._is_software_clicking = True
-                        pyautogui.click(cx, cy)
-                        pyautogui.moveTo(orig_x, orig_y)
-                        self._is_software_clicking = False
-                        self._last_mouse_pos = pyautogui.position()
+                        try:
+                            pyautogui.click(cx, cy)
+                            pyautogui.moveTo(orig_x, orig_y)
+                        finally:
+                            self._is_software_clicking = False
+                            self._last_mouse_pos = pyautogui.position()
 
                         with self._lock:
                             self.last_click_time[name] = time.time()
@@ -485,7 +507,10 @@ class AutoAllowApp:
                         break
 
                 # 释放大数组节省内存
-                del screen_cv, screen_gray, screenshot
+                try:
+                    del screen_cv, screen_gray, screenshot
+                except NameError:
+                    pass
 
                 time.sleep(self._cached_interval)
 
@@ -518,8 +543,9 @@ class AutoAllowApp:
 
             ts_display = time.strftime("%H:%M:%S")
             with self._lock:
+                count = self.click_count
                 self.click_history.append((ts_display, filepath, name,
-                                           self.click_count))
+                                           count))
                 if len(self.click_history) > MAX_HISTORY:
                     old = self.click_history.pop(0)
                 else:
