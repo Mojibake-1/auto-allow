@@ -2,9 +2,99 @@
 浮窗控件（自动展开/折叠）
 """
 
+import ctypes
 import math
+import os
 import tkinter as tk
+from ctypes import wintypes
 from PIL import Image, ImageTk, ImageDraw
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+IS_WIN32 = hasattr(ctypes, 'windll')
+
+if IS_WIN32:
+    GWL_EXSTYLE = -20
+    WS_EX_LAYERED = 0x00080000
+    AC_SRC_OVER = 0x00
+    AC_SRC_ALPHA = 0x01
+    ULW_ALPHA = 0x00000002
+    BI_RGB = 0
+    DIB_RGB_COLORS = 0
+
+    class POINT(ctypes.Structure):
+        _fields_ = [('x', wintypes.LONG), ('y', wintypes.LONG)]
+
+    class SIZE(ctypes.Structure):
+        _fields_ = [('cx', wintypes.LONG), ('cy', wintypes.LONG)]
+
+    class BLENDFUNCTION(ctypes.Structure):
+        _fields_ = [
+            ('BlendOp', ctypes.c_ubyte),
+            ('BlendFlags', ctypes.c_ubyte),
+            ('SourceConstantAlpha', ctypes.c_ubyte),
+            ('AlphaFormat', ctypes.c_ubyte),
+        ]
+
+    class BITMAPINFOHEADER(ctypes.Structure):
+        _fields_ = [
+            ('biSize', wintypes.DWORD),
+            ('biWidth', wintypes.LONG),
+            ('biHeight', wintypes.LONG),
+            ('biPlanes', wintypes.WORD),
+            ('biBitCount', wintypes.WORD),
+            ('biCompression', wintypes.DWORD),
+            ('biSizeImage', wintypes.DWORD),
+            ('biXPelsPerMeter', wintypes.LONG),
+            ('biYPelsPerMeter', wintypes.LONG),
+            ('biClrUsed', wintypes.DWORD),
+            ('biClrImportant', wintypes.DWORD),
+        ]
+
+    class BITMAPINFO(ctypes.Structure):
+        _fields_ = [
+            ('bmiHeader', BITMAPINFOHEADER),
+            ('bmiColors', wintypes.DWORD * 3),
+        ]
+
+
+def _detect_remote_session():
+    """检测是否处于远程桌面/远控环境（RDP, Parsec, etc.）"""
+    if not IS_WIN32:
+        return False
+    try:
+        # SM_REMOTESESSION = 0x1000 → RDP 远程桌面
+        is_rdp = bool(ctypes.windll.user32.GetSystemMetrics(0x1000))
+        if is_rdp:
+            return True
+    except Exception:
+        pass
+    # 检测 Parsec 进程（Parsec 不设置 SM_REMOTESESSION）
+    try:
+        import subprocess
+        result = subprocess.run(
+            ['tasklist', '/FI', 'IMAGENAME eq parsecd.exe', '/NH'],
+            capture_output=True, text=True, timeout=3,
+            creationflags=0x08000000,  # CREATE_NO_WINDOW
+        )
+        if 'parsecd.exe' in result.stdout.lower():
+            return True
+    except Exception:
+        pass
+    # 检查 Parsec 虚拟显示驱动
+    try:
+        result = subprocess.run(
+            ['tasklist', '/FI', 'IMAGENAME eq pservice.exe', '/NH'],
+            capture_output=True, text=True, timeout=3,
+            creationflags=0x08000000,
+        )
+        if 'pservice.exe' in result.stdout.lower():
+            return True
+    except Exception:
+        pass
+    return False
 
 
 class FloatingWidget(tk.Toplevel):
@@ -38,6 +128,17 @@ class FloatingWidget(tk.Toplevel):
         self._offset_y = 0
         self._pulse_phase = 0
         self._pulse_job = None
+        self._is_remote = _detect_remote_session()
+        if self._is_remote:
+            logger.info("检测到远程桌面/远控环境，已禁用分层窗口渲染")
+        self._layered_supported = (
+            IS_WIN32
+            and self.tk.call('tk', 'windowingsystem') == 'win32'
+            and not self._is_remote  # 远控环境下禁用 layered window
+        )
+        self._layered_mode = False
+        self._idle_rgba = None
+        self._anim_rgba_frames = []
 
         # 初始位置：屏幕右下角
         scr_w = self.winfo_screenwidth()
@@ -85,7 +186,6 @@ class FloatingWidget(tk.Toplevel):
 
     def _apply_circular_region(self):
         try:
-            import ctypes
             hwnd = int(self.winfo_id())
             w = self.winfo_width()
             h = self.winfo_height()
@@ -95,6 +195,100 @@ class FloatingWidget(tk.Toplevel):
                     ctypes.windll.gdi32.DeleteObject(rgn)
         except Exception:
             pass
+
+    def _clear_window_region(self):
+        if not IS_WIN32:
+            return
+        try:
+            ctypes.windll.user32.SetWindowRgn(int(self.winfo_id()), None, True)
+        except Exception:
+            pass
+
+    @staticmethod
+    def _premultiply_bgra(image):
+        raw = bytearray()
+        for r, g, b, a in image.convert('RGBA').getdata():
+            raw.extend((
+                (b * a) // 255,
+                (g * a) // 255,
+                (r * a) // 255,
+                a,
+            ))
+        return bytes(raw)
+
+    def _update_layered_bitmap(self, image, opacity=255):
+        if not self._layered_supported:
+            return False
+
+        hwnd = int(self.winfo_id())
+        width, height = image.size
+        pt_dst = POINT(self.winfo_x(), self.winfo_y())
+        size = SIZE(width, height)
+        pt_src = POINT(0, 0)
+        blend = BLENDFUNCTION(AC_SRC_OVER, 0, max(0, min(int(opacity), 255)), AC_SRC_ALPHA)
+        bmi = BITMAPINFO()
+        bmi.bmiHeader.biSize = ctypes.sizeof(BITMAPINFOHEADER)
+        bmi.bmiHeader.biWidth = width
+        bmi.bmiHeader.biHeight = -height
+        bmi.bmiHeader.biPlanes = 1
+        bmi.bmiHeader.biBitCount = 32
+        bmi.bmiHeader.biCompression = BI_RGB
+
+        screen_dc = ctypes.windll.user32.GetDC(None)
+        mem_dc = ctypes.windll.gdi32.CreateCompatibleDC(screen_dc)
+        pixel_bits = ctypes.c_void_p()
+        dib = ctypes.windll.gdi32.CreateDIBSection(
+            mem_dc,
+            ctypes.byref(bmi),
+            DIB_RGB_COLORS,
+            ctypes.byref(pixel_bits),
+            None,
+            0,
+        )
+        if not dib:
+            ctypes.windll.gdi32.DeleteDC(mem_dc)
+            ctypes.windll.user32.ReleaseDC(None, screen_dc)
+            return False
+
+        old_bitmap = ctypes.windll.gdi32.SelectObject(mem_dc, dib)
+        raw = self._premultiply_bgra(image)
+        ctypes.memmove(pixel_bits, raw, len(raw))
+
+        ex_style = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+        if not ex_style & WS_EX_LAYERED:
+            ctypes.windll.user32.SetWindowLongW(hwnd, GWL_EXSTYLE, ex_style | WS_EX_LAYERED)
+
+        ok = ctypes.windll.user32.UpdateLayeredWindow(
+            hwnd,
+            screen_dc,
+            ctypes.byref(pt_dst),
+            ctypes.byref(size),
+            mem_dc,
+            ctypes.byref(pt_src),
+            0,
+            ctypes.byref(blend),
+            ULW_ALPHA,
+        )
+
+        ctypes.windll.gdi32.SelectObject(mem_dc, old_bitmap)
+        ctypes.windll.gdi32.DeleteObject(dib)
+        ctypes.windll.gdi32.DeleteDC(mem_dc)
+        ctypes.windll.user32.ReleaseDC(None, screen_dc)
+        return bool(ok)
+
+    def _show_collapsed_layered_frame(self, frame, opacity=255):
+        if not self._layered_supported:
+            return False
+        try:
+            self.update_idletasks()
+            self.attributes('-alpha', 1.0)
+            self._clear_window_region()
+            ok = self._update_layered_bitmap(frame, opacity=opacity)
+            self._layered_mode = ok
+            return ok
+        except Exception:
+            self._layered_mode = False
+            return False
 
     # ── 工具 ────────────────────────────────────────────
     @staticmethod
@@ -107,6 +301,7 @@ class FloatingWidget(tk.Toplevel):
     def _generate_aa_frames(self):
         """用 PIL 在 4X 分辨率下预渲染 36 帧高帧率抗锯齿雷达动画"""
         self._anim_frames = []
+        self._anim_rgba_frames = []
         sz = self.COLLAPSED_W
         sc = 4
         big_size = sz * sc
@@ -124,6 +319,16 @@ class FloatingWidget(tk.Toplevel):
         big_mask = Image.new('L', (big_size, big_size), 0)
         ImageDraw.Draw(big_mask).ellipse([0, 0, big_size - 1, big_size - 1], fill=255)
         self._small_mask = big_mask.resize((sz, sz), Image.LANCZOS)
+
+        def make_rgba_frame(source):
+            frame = source.resize((sz, sz), Image.LANCZOS).convert('RGBA')
+            frame.putalpha(self._small_mask)
+            return frame
+
+        def make_tk_frame(rgba_frame):
+            masked = Image.new('RGB', (sz, sz), self._trans_color_rgb)
+            masked.paste(rgba_frame.convert('RGB'), mask=rgba_frame.getchannel('A'))
+            return ImageTk.PhotoImage(masked)
 
         cx, cy = big_size // 2, big_size // 2
         r_orb = big_size // 2 - 6 * sc
@@ -175,10 +380,8 @@ class FloatingWidget(tk.Toplevel):
         for w in range(arc_width):
             draw_i.arc([cx - r_arc + w, cy - r_arc + w, cx + r_arc - w, cy + r_arc - w],
                        start=0, end=360, fill=(track_r, track_g, track_b))
-        _small = idle_frame.resize((sz, sz), Image.LANCZOS)
-        _masked = Image.new('RGB', (sz, sz), self._trans_color_rgb)
-        _masked.paste(_small, mask=self._small_mask)
-        self._idle_frame = ImageTk.PhotoImage(_masked)
+        self._idle_rgba = make_rgba_frame(idle_frame)
+        self._idle_frame = make_tk_frame(self._idle_rgba)
 
         for frame_idx in range(36):
             frame = base_layer.copy()
@@ -193,10 +396,9 @@ class FloatingWidget(tk.Toplevel):
                 draw_f.arc([cx - r_arc + w, cy - r_arc + w, cx + r_arc - w, cy + r_arc - w],
                            start=start_angle, end=start_angle + 120, fill=(ar, ag, ab))
             
-            _small = frame.resize((sz, sz), Image.LANCZOS)
-            _masked = Image.new('RGB', (sz, sz), self._trans_color_rgb)
-            _masked.paste(_small, mask=self._small_mask)
-            self._anim_frames.append(ImageTk.PhotoImage(_masked))
+            rgba_frame = make_rgba_frame(frame)
+            self._anim_rgba_frames.append(rgba_frame)
+            self._anim_frames.append(make_tk_frame(rgba_frame))
 
     def _build_collapsed_view(self):
         c = self.c
@@ -356,6 +558,7 @@ class FloatingWidget(tk.Toplevel):
         x = min(x, scr_w - self.EXPANDED_W - 5)
         y = min(y, scr_h - self.EXPANDED_H - 5)
         self.geometry(f"{self.EXPANDED_W}x{self.EXPANDED_H}+{x}+{y}")
+        self._layered_mode = False
         # 取消透明色键，恢复正常 bg
         try:
             self.attributes('-transparentcolor', '')
@@ -375,24 +578,49 @@ class FloatingWidget(tk.Toplevel):
 
         x, y = self.winfo_x(), self.winfo_y()
         self.geometry(f"{self.COLLAPSED_W}x{self.COLLAPSED_H}+{x}+{y}")
+        self._clear_window_region()
 
-        # 透明色键方案：圆形外部像素 = trans_color → OS 渲染为透明
-        trans = self._trans_color_hex
-        self.configure(bg=trans)
-        self.collapsed_frame.configure(bg=trans)
-        self.mini_canvas.configure(bg=trans)
-        try:
-            self.attributes('-transparentcolor', trans)
-        except Exception:
-            pass
+        layered_ok = False
+        if not self._is_remote:
+            # 正常环境：尝试分层窗口渲染（最佳效果）
+            layered_ok = self._show_collapsed_layered_frame(
+                self._idle_rgba,
+                opacity=int(255 * 0.95),
+            )
 
-        # 圆形窗口区域裁剪兜底（transparentcolor 不生效时仍保证圆形）
-        self.after(20, self._apply_circular_region)
+        if not layered_ok:
+            if self._is_remote:
+                # 远控环境：使用椭圆 region 裁剪（不依赖 GDI bitmap）
+                self.configure(bg=self.c['bg'])
+                self.collapsed_frame.configure(bg=self.c['bg'])
+                self.mini_canvas.configure(bg=self.c['bg'])
+                self.attributes('-alpha', 0.95)
+                try:
+                    self.attributes('-transparentcolor', '')
+                except Exception:
+                    pass
+                self.after(20, self._apply_circular_region)
+            else:
+                # 本地环境 fallback：透明色键 + 圆形区域裁剪兜底
+                trans = self._trans_color_hex
+                self.configure(bg=trans)
+                self.collapsed_frame.configure(bg=trans)
+                self.mini_canvas.configure(bg=trans)
+                self.attributes('-alpha', 0.95)
+                try:
+                    self.attributes('-transparentcolor', trans)
+                except Exception:
+                    pass
+                # 圆形区域裁剪兜底（transparentcolor 不生效时仍保证圆形）
+                self.after(20, self._apply_circular_region)
 
         if self.app.monitoring:
             self._start_pulse()
         else:
-            self.mini_canvas.itemconfig(self._img_item, image=self._idle_frame)
+            if layered_ok:
+                self._layered_mode = True
+            else:
+                self.mini_canvas.itemconfig(self._img_item, image=self._idle_frame)
 
     # ── 脉冲动画 ──────────────────────────────────────
     def _start_pulse(self):
@@ -407,8 +635,11 @@ class FloatingWidget(tk.Toplevel):
             self._pulse_job = None
         # 恢复默认外观
         if not self.is_expanded:
-            self.mini_canvas.itemconfig(self._img_item, image=self._idle_frame)
-            self.attributes('-alpha', 0.95)
+            if self._layered_mode and self._idle_rgba is not None:
+                self._show_collapsed_layered_frame(self._idle_rgba, opacity=int(255 * 0.95))
+            else:
+                self.mini_canvas.itemconfig(self._img_item, image=self._idle_frame)
+                self.attributes('-alpha', 0.95)
 
     def _do_pulse(self):
         """丝滑自转弧线脉冲效果"""
@@ -423,9 +654,14 @@ class FloatingWidget(tk.Toplevel):
         alpha = 0.85 + 0.15 * val
 
         try:
-            self.attributes('-alpha', alpha)
-            # 通过播放预渲染帧实现硬件级平滑动画
-            self.mini_canvas.itemconfig(self._img_item, image=self._anim_frames[self._frame_idx])
+            if self._layered_mode and self._anim_rgba_frames:
+                self._show_collapsed_layered_frame(
+                    self._anim_rgba_frames[self._frame_idx],
+                    opacity=int(255 * alpha),
+                )
+            else:
+                self.attributes('-alpha', alpha)
+                self.mini_canvas.itemconfig(self._img_item, image=self._anim_frames[self._frame_idx])
         except Exception:
             pass
 

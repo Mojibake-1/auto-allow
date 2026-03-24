@@ -5,7 +5,7 @@
 import tkinter as tk
 from tkinter import messagebox
 import pyautogui
-from PIL import Image, ImageTk, ImageGrab, ImageDraw
+from PIL import Image, ImageTk, ImageDraw
 import cv2
 import numpy as np
 import pystray
@@ -27,7 +27,7 @@ from .constants import (
 from .themes import get_theme, DEFAULT_THEME
 from .icon import generate_icon
 from .templates import TemplateManager
-from .capture import ScreenCaptureOverlay
+from .capture import ScreenCaptureOverlay, robust_grab
 from .widget import FloatingWidget
 from .settings import SettingsDialog
 from .history import HistoryViewer
@@ -275,7 +275,7 @@ class AutoAllowApp:
             return
 
         self.widget.set_last_action("🔍 正在测试扫描...")
-        screenshot = ImageGrab.grab()
+        screenshot = robust_grab()
         screen_cv = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
         threshold = self.confidence.get()
 
@@ -416,7 +416,7 @@ class AutoAllowApp:
                     self.root.after(0, self.widget.set_status,
                                     "监控中...", self.c['success'])
 
-                screenshot = ImageGrab.grab()
+                screenshot = robust_grab()
                 screen_np = np.array(screenshot)
                 screen_cv = cv2.cvtColor(screen_np, cv2.COLOR_RGB2BGR)
                 screen_gray = cv2.cvtColor(screen_cv, cv2.COLOR_BGR2GRAY)
@@ -464,7 +464,7 @@ class AutoAllowApp:
                         # Step 3: ROI 快速二次验证（缩小 TOCTOU 窗口）
                         try:
                             scr_w, scr_h = screenshot.size
-                            roi_grab = ImageGrab.grab(
+                            roi_grab = robust_grab(
                                 bbox=(max(x - 2, 0), max(y - 2, 0),
                                       min(x + tw + 2, scr_w),
                                       min(y + th + 2, scr_h)))
