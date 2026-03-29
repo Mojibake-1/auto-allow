@@ -54,26 +54,6 @@ class AutoAllowApp:
         self._is_software_clicking = False
         self._lock = threading.Lock()  # 保护跨线程共享状态
 
-    @property
-    def monitoring(self):
-        with self._lock:
-            return self._monitoring
-
-    @monitoring.setter
-    def monitoring(self, value):
-        with self._lock:
-            self._monitoring = value
-
-    @property
-    def running(self):
-        with self._lock:
-            return self._running
-
-    @running.setter
-    def running(self, value):
-        with self._lock:
-            self._running = value
-
         # 配置变量
         self.interval = tk.DoubleVar(value=DEFAULT_INTERVAL)
         self.confidence = tk.DoubleVar(value=DEFAULT_CONFIDENCE)
@@ -100,6 +80,26 @@ class AutoAllowApp:
 
         # 全局热键
         self.root.bind_all("<F6>", lambda e: self.toggle_monitoring())
+
+    @property
+    def monitoring(self):
+        with self._lock:
+            return self._monitoring
+
+    @monitoring.setter
+    def monitoring(self, value):
+        with self._lock:
+            self._monitoring = value
+
+    @property
+    def running(self):
+        with self._lock:
+            return self._running
+
+    @running.setter
+    def running(self, value):
+        with self._lock:
+            self._running = value
 
     # ── 读取主题 ID（config 可能还没完整加载）──────────
     def _read_theme_from_config(self):
