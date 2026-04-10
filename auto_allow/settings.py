@@ -14,7 +14,7 @@ class SettingsDialog(tk.Toplevel):
         self.app = app
         self.c = app.c
         self.title("⚙ Auto Allow 设置")
-        self.geometry("480x760")
+        self.geometry("500x840")
         self.resizable(False, True)  # 允许纵向调整大小以防内容溢出
         self.attributes('-topmost', True)
         self.configure(bg=self.c['bg'])
@@ -80,6 +80,44 @@ class SettingsDialog(tk.Toplevel):
         self._slider_row(params, "匹配置信度", self.app.confidence, 0.70, 1.0)
         self._slider_row(params, "点击冷却（秒）", self.app.cooldown, 0.5, 15.0)
         tk.Frame(params, bg=c['card'], height=6).pack()
+
+        # ── 屏幕范围 ──
+        tk.Label(self, text="🖥 监控屏幕范围",
+                 font=("Microsoft YaHei", 12, "bold"),
+                 fg=c['fg'], bg=c['bg']).pack(anchor='w', padx=16, pady=(4, 6))
+
+        screen_frame = tk.Frame(self, bg=c['card'],
+                                highlightbackground=c['border'],
+                                highlightthickness=1)
+        screen_frame.pack(fill=tk.X, padx=16, pady=(0, 8))
+
+        inner_screen = tk.Frame(screen_frame, bg=c['card'])
+        inner_screen.pack(fill=tk.X, padx=12, pady=8)
+
+        self.screen_region_var = tk.StringVar(value=self.app.get_screen_region().key)
+
+        for region in self.app.get_available_screen_regions():
+            row = tk.Frame(inner_screen, bg=c['card'])
+            row.pack(fill=tk.X, pady=1)
+
+            rb = tk.Radiobutton(
+                row, text=region.label, variable=self.screen_region_var,
+                value=region.key,
+                font=("Microsoft YaHei", 10),
+                fg=c['fg'], bg=c['card'],
+                selectcolor=c['input'],
+                activebackground=c['card'],
+                activeforeground=c['accent'],
+                cursor="hand2",
+                anchor='w',
+                justify=tk.LEFT,
+            )
+            rb.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4, pady=2)
+
+        tk.Label(inner_screen,
+                 text="💡 选“所有屏幕”会同时扫描主屏和拓展屏，截模板时也按这个范围取图",
+                 font=("Microsoft YaHei", 8),
+                 fg=c['dim'], bg=c['card']).pack(anchor='w', padx=4, pady=(4, 0))
 
         # ── 主题选择 ──
         tk.Label(self, text="🎨 界面主题",
@@ -197,6 +235,7 @@ class SettingsDialog(tk.Toplevel):
             self.app.widget.update_template_count(0)
 
     def _save(self):
+        self.app.screen_region_key = self.screen_region_var.get()
         # 应用主题（实时切换，无需重启）
         new_theme = self.theme_var.get()
         if new_theme != self.app.current_theme_id:

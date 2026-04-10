@@ -23,11 +23,19 @@ from .constants import (
     CONFIG_DIR, HISTORY_DIR, CONFIG_PATH,
     MAX_HISTORY, HISTORY_CROP_W, HISTORY_CROP_H,
     DEFAULT_INTERVAL, DEFAULT_CONFIDENCE, DEFAULT_COOLDOWN,
+    DEFAULT_SCREEN_REGION,
 )
 from .themes import get_theme, DEFAULT_THEME
 from .icon import generate_icon
 from .templates import TemplateManager
-from .capture import ScreenCaptureOverlay, robust_grab
+from .capture import (
+    ScreenCaptureOverlay,
+    capture_screen_region,
+    list_screen_regions,
+    native_left_click,
+    resolve_screen_region,
+    robust_grab,
+)
 from .widget import FloatingWidget
 from .settings import SettingsDialog
 from .history import HistoryViewer
@@ -58,11 +66,13 @@ class AutoAllowApp:
         self.interval = tk.DoubleVar(value=DEFAULT_INTERVAL)
         self.confidence = tk.DoubleVar(value=DEFAULT_CONFIDENCE)
         self.cooldown = tk.DoubleVar(value=DEFAULT_COOLDOWN)
+        self.screen_region_key = DEFAULT_SCREEN_REGION
 
         # 线程安全的配置快照（监控线程读取这些而非 DoubleVar）
         self._cached_interval = DEFAULT_INTERVAL
         self._cached_confidence = DEFAULT_CONFIDENCE
         self._cached_cooldown = DEFAULT_COOLDOWN
+        self._cached_screen_region_key = DEFAULT_SCREEN_REGION
 
         # 初始化
         os.makedirs(CONFIG_DIR, exist_ok=True)
@@ -100,6 +110,15 @@ class AutoAllowApp:
     def running(self, value):
         with self._lock:
             self._running = value
+
+    def get_available_screen_regions(self):
+        return list_screen_regions()
+
+    def get_screen_region(self, region_key=None):
+        return resolve_screen_region(region_key or self.screen_region_key)
+
+    def get_screen_region_label(self, region_key=None):
+        return self.get_screen_region(region_key).label
 
     # ── 读取主题 ID（config 可能还没完整加载）──────────
     def _read_theme_from_config(self):
@@ -224,10 +243,12 @@ class AutoAllowApp:
         self._cached_interval = self.interval.get()
         self._cached_confidence = self.confidence.get()
         self._cached_cooldown = self.cooldown.get()
+        self._cached_screen_region_key = self.screen_region_key
+        region_label = self.get_screen_region_label(self._cached_screen_region_key)
         self.widget.set_monitoring_ui(True)
         self.widget.set_status("监控中...", self.c['success'])
         self.widget.set_last_action(
-            f"正在扫描 {self.tpl_mgr.count()} 个模板...")
+            f"正在扫描 {self.tpl_mgr.count()} 个模板 | {region_label}")
         self._update_tray_tooltip("监控中...")
         threading.Thread(target=self._monitor_loop, daemon=True).start()
 
@@ -252,7 +273,11 @@ class AutoAllowApp:
         self.root.after(300, self._do_capture)
 
     def _do_capture(self):
-        ScreenCaptureOverlay(self.root, self._on_captured)
+        ScreenCaptureOverlay(
+            self.root,
+            self._on_captured,
+            region=self.get_screen_region(),
+        )
 
     def _on_captured(self, region):
         name = self.tpl_mgr.add(region)
@@ -274,8 +299,9 @@ class AutoAllowApp:
             messagebox.showwarning("提示", "请先截取至少一个模板！")
             return
 
-        self.widget.set_last_action("🔍 正在测试扫描...")
-        screenshot = robust_grab()
+        region = self.get_screen_region()
+        self.widget.set_last_action(f"🔍 正在测试扫描 | {region.label}")
+        screenshot = capture_screen_region(region)
         screen_cv = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
         threshold = self.confidence.get()
 
@@ -313,9 +339,9 @@ class AutoAllowApp:
                 matches.append((name, max_val, "❌ 未匹配"))
 
         # 显示预览窗口
-        self._show_test_preview(marked, matches, threshold)
+        self._show_test_preview(marked, matches, threshold, region.label)
 
-    def _show_test_preview(self, marked_img, matches, threshold):
+    def _show_test_preview(self, marked_img, matches, threshold, region_label):
         """显示测试扫描结果的预览窗口"""
         preview = tk.Toplevel(self.root)
         preview.title("🔍 测试扫描结果")
@@ -341,6 +367,10 @@ class AutoAllowApp:
         # 匹配结果列表
         info_frame = tk.Frame(preview, bg=self.c['card'])
         info_frame.pack(fill=tk.X, padx=10, pady=5)
+
+        tk.Label(info_frame, text=f"范围: {region_label}",
+                 font=("Microsoft YaHei", 9),
+                 fg=self.c['dim'], bg=self.c['card']).pack(anchor='w', padx=8, pady=(6, 0))
 
         tk.Label(info_frame, text=f"阈值: {threshold:.2f}",
                  font=("Microsoft YaHei", 10, "bold"),
@@ -416,7 +446,8 @@ class AutoAllowApp:
                     self.root.after(0, self.widget.set_status,
                                     "监控中...", self.c['success'])
 
-                screenshot = robust_grab()
+                region = self.get_screen_region(self._cached_screen_region_key)
+                screenshot = capture_screen_region(region)
                 screen_np = np.array(screenshot)
                 screen_cv = cv2.cvtColor(screen_np, cv2.COLOR_RGB2BGR)
                 screen_gray = cv2.cvtColor(screen_cv, cv2.COLOR_BGR2GRAY)
@@ -458,16 +489,23 @@ class AutoAllowApp:
                                 continue  # 彩色验证未通过，跳过
                             final_conf = color_val
 
-                        cx = x + tw // 2
-                        cy = y + th // 2
+                        cx_local = x + tw // 2
+                        cy_local = y + th // 2
+                        cx = region.left + cx_local
+                        cy = region.top + cy_local
 
                         # Step 3: ROI 快速二次验证（缩小 TOCTOU 窗口）
                         try:
                             scr_w, scr_h = screenshot.size
                             roi_grab = robust_grab(
-                                bbox=(max(x - 2, 0), max(y - 2, 0),
-                                      min(x + tw + 2, scr_w),
-                                      min(y + th + 2, scr_h)))
+                                bbox=(
+                                    region.left + max(x - 2, 0),
+                                    region.top + max(y - 2, 0),
+                                    region.left + min(x + tw + 2, scr_w),
+                                    region.top + min(y + th + 2, scr_h),
+                                ),
+                                all_screens=region.is_all,
+                            )
                             roi_arr = cv2.cvtColor(
                                 np.array(roi_grab), cv2.COLOR_RGB2BGR)
                             if (roi_arr.shape[0] >= th
@@ -489,7 +527,7 @@ class AutoAllowApp:
                         orig_x, orig_y = pyautogui.position()
                         self._is_software_clicking = True
                         try:
-                            pyautogui.click(cx, cy)
+                            native_left_click(cx, cy)
                             pyautogui.moveTo(orig_x, orig_y)
                         finally:
                             self._is_software_clicking = False
@@ -583,12 +621,14 @@ class AutoAllowApp:
                 'interval': self.interval.get(),
                 'confidence': self.confidence.get(),
                 'cooldown': self.cooldown.get(),
+                'screen_region': self.screen_region_key,
                 'theme': self.current_theme_id,
             }
             # 同步更新线程安全的配置快照
             self._cached_interval = cfg['interval']
             self._cached_confidence = cfg['confidence']
             self._cached_cooldown = cfg['cooldown']
+            self._cached_screen_region_key = cfg['screen_region']
             with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
                 json.dump(cfg, f, indent=2)
         except Exception:
@@ -608,6 +648,8 @@ class AutoAllowApp:
                 self._cached_interval = iv
                 self._cached_confidence = cf
                 self._cached_cooldown = cd
+                self.screen_region_key = cfg.get('screen_region', DEFAULT_SCREEN_REGION)
+                self._cached_screen_region_key = self.screen_region_key
                 self.current_theme_id = cfg.get('theme', DEFAULT_THEME)
                 self.c = get_theme(self.current_theme_id)
         except Exception as e:
