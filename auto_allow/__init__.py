@@ -3,3 +3,7 @@
 ========================================
 系统托盘常驻 + 浮窗控制 + 多模板屏幕匹配自动点击
 """
+
+from .dpi import enable_per_monitor_dpi_awareness
+
+enable_per_monitor_dpi_awareness()

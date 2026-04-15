@@ -14,8 +14,42 @@ from PIL import Image, ImageGrab, ImageTk
 
 logger = logging.getLogger(__name__)
 
+INPUT_MOUSE = 0
+MOUSEEVENTF_MOVE = 0x0001
 MOUSEEVENTF_LEFTDOWN = 0x0002
 MOUSEEVENTF_LEFTUP = 0x0004
+MOUSEEVENTF_ABSOLUTE = 0x8000
+MOUSEEVENTF_VIRTUALDESK = 0x4000
+
+SM_XVIRTUALSCREEN = 76
+SM_YVIRTUALSCREEN = 77
+SM_CXVIRTUALSCREEN = 78
+SM_CYVIRTUALSCREEN = 79
+
+ULONG_PTR = ctypes.c_ulonglong if ctypes.sizeof(ctypes.c_void_p) == 8 else ctypes.c_ulong
+
+
+class MOUSEINPUT(ctypes.Structure):
+    _fields_ = [
+        ("dx", ctypes.c_long),
+        ("dy", ctypes.c_long),
+        ("mouseData", ctypes.c_ulong),
+        ("dwFlags", ctypes.c_ulong),
+        ("time", ctypes.c_ulong),
+        ("dwExtraInfo", ULONG_PTR),
+    ]
+
+
+class _INPUT_UNION(ctypes.Union):
+    _fields_ = [("mi", MOUSEINPUT)]
+
+
+class INPUT(ctypes.Structure):
+    _anonymous_ = ("union",)
+    _fields_ = [
+        ("type", ctypes.c_ulong),
+        ("union", _INPUT_UNION),
+    ]
 
 
 @dataclass(frozen=True)
@@ -230,14 +264,89 @@ def capture_screen_region(region):
     return robust_grab(bbox=region.bbox, all_screens=region.is_all)
 
 
-def native_left_click(x, y):
+def _virtual_screen_bounds():
+    user32 = ctypes.windll.user32
+    left = user32.GetSystemMetrics(SM_XVIRTUALSCREEN)
+    top = user32.GetSystemMetrics(SM_YVIRTUALSCREEN)
+    width = user32.GetSystemMetrics(SM_CXVIRTUALSCREEN)
+    height = user32.GetSystemMetrics(SM_CYVIRTUALSCREEN)
+    return left, top, max(width, 1), max(height, 1)
+
+
+def _normalize_absolute_coordinates(x, y):
+    left, top, width, height = _virtual_screen_bounds()
+    abs_x = round((int(x) - left) * 65535 / max(width - 1, 1))
+    abs_y = round((int(y) - top) * 65535 / max(height - 1, 1))
+    return abs_x, abs_y
+
+
+def _send_mouse_inputs(*mouse_inputs):
     if not hasattr(ctypes, "windll"):
-        raise RuntimeError("Native click is only available on Windows")
+        raise RuntimeError("Native mouse input is only available on Windows")
 
     user32 = ctypes.windll.user32
-    user32.SetCursorPos(int(x), int(y))
-    user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-    user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+    inputs = (INPUT * len(mouse_inputs))()
+    for index, mouse_input in enumerate(mouse_inputs):
+        inputs[index].type = INPUT_MOUSE
+        inputs[index].mi = mouse_input
+
+    sent = user32.SendInput(len(inputs), ctypes.byref(inputs), ctypes.sizeof(INPUT))
+    if sent != len(inputs):
+        raise ctypes.WinError()
+
+
+def native_move_to(x, y):
+    abs_x, abs_y = _normalize_absolute_coordinates(x, y)
+    _send_mouse_inputs(
+        MOUSEINPUT(
+            dx=abs_x,
+            dy=abs_y,
+            mouseData=0,
+            dwFlags=MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK,
+            time=0,
+            dwExtraInfo=0,
+        )
+    )
+
+
+def native_left_click(x, y):
+    abs_x, abs_y = _normalize_absolute_coordinates(x, y)
+    _send_mouse_inputs(
+        MOUSEINPUT(
+            dx=abs_x,
+            dy=abs_y,
+            mouseData=0,
+            dwFlags=MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK,
+            time=0,
+            dwExtraInfo=0,
+        ),
+        MOUSEINPUT(
+            dx=abs_x,
+            dy=abs_y,
+            mouseData=0,
+            dwFlags=(
+                MOUSEEVENTF_MOVE
+                | MOUSEEVENTF_ABSOLUTE
+                | MOUSEEVENTF_VIRTUALDESK
+                | MOUSEEVENTF_LEFTDOWN
+            ),
+            time=0,
+            dwExtraInfo=0,
+        ),
+        MOUSEINPUT(
+            dx=abs_x,
+            dy=abs_y,
+            mouseData=0,
+            dwFlags=(
+                MOUSEEVENTF_MOVE
+                | MOUSEEVENTF_ABSOLUTE
+                | MOUSEEVENTF_VIRTUALDESK
+                | MOUSEEVENTF_LEFTUP
+            ),
+            time=0,
+            dwExtraInfo=0,
+        ),
+    )
 
 
 def _geometry_string(width, height, left, top):

@@ -33,6 +33,7 @@ from .capture import (
     capture_screen_region,
     list_screen_regions,
     native_left_click,
+    native_move_to,
     resolve_screen_region,
     robust_grab,
 )
@@ -528,7 +529,7 @@ class AutoAllowApp:
                         self._is_software_clicking = True
                         try:
                             native_left_click(cx, cy)
-                            pyautogui.moveTo(orig_x, orig_y)
+                            native_move_to(orig_x, orig_y)
                         finally:
                             self._is_software_clicking = False
                             self._last_mouse_pos = pyautogui.position()
